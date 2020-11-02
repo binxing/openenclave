@@ -355,6 +355,21 @@ incompatibilities still exist in:
   SDK only supports enclave applications calling
   [MbedTLS](/docs/MbedtlsSupport.md) directly and not through an SDK wrapper.
 
+
+## Functions and Data Structures Reference
+
+### Enclave Creation and Destruction
+
+### ECalls
+
+### Quoting and Attestation
+
+### Data Sealing
+
+### Thread Synchronization
+
+## Authors
+
 ## Authors
 
 Cedric Xing (cedric.xing@intel.com)
