@@ -368,7 +368,57 @@ incompatibilities still exist in:
 
 ### Thread Synchronization
 
-## Authors
+#### Spin locks
+The Intel SGX SDK provides the following definitions for spin locks.
+```c
+typedef volatile uint32_t sgx_spinlock_t;
+#define SGX_SPINLOCK_INITIALIZER 0
+uint32_t SGXAPI sgx_spin_lock(sgx_spinlock_t *lock);
+uint32_t SGXAPI sgx_spin_unlock(sgx_spinlock_t *lock);
+```
+
+The OE SDK provides the following
+```c
+typedef volatile uint32_t oe_spinlock_t;
+#define OE_SPINLOCK_INITIALIZER 0
+oe_result_t oe_spin_lock(oe_spinlock_t* spinlock);
+oe_result_t oe_spin_unlock(oe_spinlock_t* spinlock);
+```
+
+The OE SDK functions, types, and defines can be used instead of the SGX SDK ones. Also, the OE SDK provides some additional versions of the APIs (trylock, init, etc).
+
+#### Mutexes
+The SGX APIs for mutexes are:
+```c
+int SGXAPI sgx_thread_mutex_init(sgx_thread_mutex_t *mutex, const sgx_thread_mutexattr_t *unused);
+int SGXAPI sgx_thread_mutex_destroy(sgx_thread_mutex_t *mutex);
+int SGXAPI sgx_thread_mutex_lock(sgx_thread_mutex_t *mutex);
+int SGXAPI sgx_thread_mutex_trylock(sgx_thread_mutex_t *mutex);
+int SGXAPI sgx_thread_mutex_unlock(sgx_thread_mutex_t *mutex);
+```
+
+The OE SDKs corresponding to these APIs are:
+```c
+oe_result_t oe_mutex_init(oe_mutex_t* mutex);
+oe_result_t oe_mutex_destroy(oe_mutex_t* mutex);
+oe_result_t oe_mutex_lock(oe_mutex_t* mutex);
+oe_result_t oe_mutex_trylock(oe_mutex_t* mutex);
+oe_result_t oe_mutex_unlock(oe_mutex_t* mutex);
+```
+The differences in the APIs are in the initialization. The current OE SDK implementation does not accept any mutex attributes. In its current implementation they are all initialized as `PTHREAD_MUTEX_RECURSIVE_NP`.
+Similarly, the SGX API ignores the mutex attributes, but does define an initializer for recursive and another for a non-recursive mutex.
+```c
+#define SGX_THREAD_MUTEX_NONRECURSIVE   0x01
+#define SGX_THREAD_MUTEX_RECURSIVE      0x02
+#define SGX_THREAD_NONRECURSIVE_MUTEX_INITIALIZER \
+            {0, SGX_THREAD_MUTEX_NONRECURSIVE, 0, SGX_THREAD_T_NULL, {SGX_THREAD_T_NULL, SGX_THREAD_T_NULL}}
+#define SGX_THREAD_RECURSIVE_MUTEX_INITIALIZER \
+            {0, SGX_THREAD_MUTEX_RECURSIVE, 0, SGX_THREAD_T_NULL, {SGX_THREAD_T_NULL, SGX_THREAD_T_NULL}}
+#define SGX_THREAD_MUTEX_INITIALIZER \
+            SGX_THREAD_NONRECURSIVE_MUTEX_INITIALIZER
+```
+
+If your existing SGX enclaves rely on the (default) non-recursive mutex behavior and will behave differently if it were a recursive mutex, your existing code may need to be modified.
 
 ## Authors
 
