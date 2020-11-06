@@ -412,7 +412,7 @@ int SGXAPI sgx_thread_mutex_trylock(sgx_thread_mutex_t *mutex);
 int SGXAPI sgx_thread_mutex_unlock(sgx_thread_mutex_t *mutex);
 ```
 
-The OE SDKs corresponding to these APIs are:
+The OE APIs corresponding to these are:
 ```c
 oe_result_t oe_mutex_init(oe_mutex_t* mutex);
 oe_result_t oe_mutex_destroy(oe_mutex_t* mutex);
@@ -420,8 +420,19 @@ oe_result_t oe_mutex_lock(oe_mutex_t* mutex);
 oe_result_t oe_mutex_trylock(oe_mutex_t* mutex);
 oe_result_t oe_mutex_unlock(oe_mutex_t* mutex);
 ```
-The differences in the APIs are in the initialization. The current OE SDK implementation does not accept any mutex attributes. In its current implementation they are all initialized as `PTHREAD_MUTEX_RECURSIVE_NP`.
-Similarly, the SGX API ignores the mutex attributes, but does define an initializer for recursive and another for a non-recursive mutex.
+The differences in the APIs are in the initialization. The current OE SDK implementation does not accept any mutex attributes. In its current implementation they are all initialized as `PTHREAD_MUTEX_RECURSIVE_NP`. Initialization is simplified via the `OE_MUTEX_INITIALIZER` define:
+
+```c
+// Default OE MUTEX initializater. All mutexes are recursive.
+#define OE_MUTEX_INITIALIZER \
+    {                        \
+        {                    \
+            0                \
+        }                    \
+    }
+```
+ 
+The SGX API declares but ignores the mutex attributes in the initialization routine. The major difference is that the SGX SDK does support and define an initializer for recursive and another for a non-recursive mutex.
 ```c
 #define SGX_THREAD_MUTEX_NONRECURSIVE   0x01
 #define SGX_THREAD_MUTEX_RECURSIVE      0x02
@@ -433,8 +444,77 @@ Similarly, the SGX API ignores the mutex attributes, but does define an initiali
             SGX_THREAD_NONRECURSIVE_MUTEX_INITIALIZER
 ```
 
-If your existing SGX enclaves rely on the (default) non-recursive mutex behavior and will behave differently if it were a recursive mutex, your existing code may need to be modified.
+If your existing SGX enclave relies on the (default) non-recursive mutex behavior and will behave differently if it were a recursive mutex, your existing code may need to be modified.
+
+#### Conditional Variables
+The SGX APIs for conditional variables are:
+```c
+int SGXAPI sgx_thread_cond_init(sgx_thread_cond_t *cond, const sgx_thread_condattr_t *unused);
+int SGXAPI sgx_thread_cond_destroy(sgx_thread_cond_t *cond);
+int SGXAPI sgx_thread_cond_wait(sgx_thread_cond_t *cond, sgx_thread_mutex_t *mutex);
+int SGXAPI sgx_thread_cond_signal(sgx_thread_cond_t *cond);
+int SGXAPI sgx_thread_cond_broadcast(sgx_thread_cond_t *cond);
+#define SGX_THREAD_COND_INITIALIZER  {0, {SGX_THREAD_T_NULL, SGX_THREAD_T_NULL}}
+```
+The corresponding OE APIs are:
+```c
+oe_result_t oe_cond_init(oe_cond_t* cond);
+oe_result_t oe_cond_destroy(oe_cond_t* cond);
+oe_result_t oe_cond_wait(oe_cond_t* cond, oe_mutex_t* mutex);
+oe_result_t oe_cond_signal(oe_cond_t* cond);
+oe_result_t oe_cond_broadcast(oe_cond_t* cond);
+#define OE_COND_INITIALIZER \
+    {                       \
+        {                   \
+            0               \
+        }                   \
+    }
+```
+These APIs provide the same functionality.
+
+#### Reader Writer Locks
+Both SDKs support `rwlock`s. The SGX SDK definitions are:
+```c
+/* Reader/Writer Locks */
+int SGXAPI sgx_thread_rwlock_init(sgx_thread_rwlock_t *rwlock, const sgx_thread_rwlockattr_t *unused);
+int SGXAPI sgx_thread_rwlock_destroy(sgx_thread_rwlock_t *rwlock);
+int SGXAPI sgx_thread_rwlock_rdlock(sgx_thread_rwlock_t *rwlock);
+int SGXAPI sgx_thread_rwlock_wrlock(sgx_thread_rwlock_t *rwlock);
+int SGXAPI sgx_thread_rwlock_unlock(sgx_thread_rwlock_t *rwlock);
+int SGXAPI sgx_thread_rwlock_tryrdlock(sgx_thread_rwlock_t *rwlock);
+int SGXAPI sgx_thread_rwlock_trywrlock(sgx_thread_rwlock_t *rwlock);
+
+int SGXAPI sgx_thread_rwlock_rdunlock(sgx_thread_rwlock_t *rwlock);
+int SGXAPI sgx_thread_rwlock_wrunlock(sgx_thread_rwlock_t *rwlock);
+```
+
+```c
+oe_result_t oe_rwlock_init(oe_rwlock_t* rw_lock);
+oe_result_t oe_rwlock_destroy(oe_rwlock_t* rw_lock);
+oe_result_t oe_rwlock_rdlock(oe_rwlock_t* rw_lock);
+oe_result_t oe_rwlock_wrlock(oe_rwlock_t* rw_lock);
+oe_result_t oe_rwlock_unlock(oe_rwlock_t* rw_lock);
+oe_result_t oe_rwlock_tryrdlock(oe_rwlock_t* rw_lock);
+oe_result_t oe_rwlock_trywrlock(oe_rwlock_t* rw_lock);
+```
+
+As you can see above, the SGX SDK provides some unlock APIs that specify whether or not you are trying to unlock a read lock or write lock. The OE SDK has a single unlock API that can be used instead (the SGX SDK also provides this same unlock API as well).
+
+#### Utility functions
+The SGX SDK provides the following utility functions
+```c
+sgx_thread_t SGXAPI sgx_thread_self(void);
+int sgx_thread_equal(sgx_thread_t a, sgx_thread_t b);
+```
+
+These have direct equivalents in the OE SDK:
+```c
+oe_thread_t oe_thread_self(void);
+bool oe_thread_equal(oe_thread_t thread1, oe_thread_t thread2);
+```
+
 
 ## Authors
 
 Cedric Xing (cedric.xing@intel.com)
+
