@@ -430,6 +430,14 @@ mode, which corresponds to `<TCSPolicy>` 0, the thread-local data is
 initialized when the enclave thread starts execution for the first time.
 >>>>>>> 15e6a7940... Added Threading section.
 
+## Switchless
+
+The Intel SGX SDK and the Open Enclave SDK support switchless for both ECALL
+and OCALL functions. In addition, sgx_edger8r and oeedger8r support the same
+keyword to identify switchless functions: transition_using_threads.
+
+TBD: Data structure to configure/initialize and tune (callbacks) switchless.
+
 ## Authors
 
 Cedric Xing (cedric.xing@intel.com)
