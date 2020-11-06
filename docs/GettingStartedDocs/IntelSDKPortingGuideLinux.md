@@ -355,6 +355,7 @@ incompatibilities still exist in:
   SDK only supports enclave applications calling
   [MbedTLS](/docs/MbedtlsSupport.md) directly and not through an SDK wrapper.
 
+<<<<<<< HEAD
 
 ## Functions and Data Structures Reference
 
@@ -419,6 +420,15 @@ Similarly, the SGX API ignores the mutex attributes, but does define an initiali
 ```
 
 If your existing SGX enclaves rely on the (default) non-recursive mutex behavior and will behave differently if it were a recursive mutex, your existing code may need to be modified.
+=======
+## Threading
+
+When the untrusted application ECALLS into an enclave, the untrusted Run-Time
+System (uRTS) binds the calling host thread to an enclave thread. Host and
+enclave threads might be bound for the entire lifetime of the thread. In this
+mode, which corresponds to `<TCSPolicy>` 0, the thread-local data is
+initialized when the enclave thread starts execution for the first time.
+>>>>>>> 15e6a7940... Added Threading section.
 
 ## Authors
 
