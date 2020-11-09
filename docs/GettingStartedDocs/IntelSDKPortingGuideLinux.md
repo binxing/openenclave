@@ -363,6 +363,10 @@ enclave threads might be bound for the entire lifetime of the thread. In this
 mode, which corresponds to `<TCSPolicy>` 0, the thread-local data is
 initialized when the enclave thread starts execution for the first time.
 
+### POSIX Threads (pthreads)
+
+TBD.
+
 ## Switchless
 
 The Intel SGX SDK and the Open Enclave SDK support switchless for both ECALL
