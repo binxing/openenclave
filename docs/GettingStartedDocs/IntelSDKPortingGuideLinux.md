@@ -386,6 +386,11 @@ feature to a branch, it was then deprecated because they want a full file
 system (not an encrypted file). We need to work with the OE on a new
 architecture. 
 
+
+## Trusted Crypto Library (tcrypto)
+
+TBD.
+
 ## Functions and Data Structures Reference
 
 ### Enclave Creation and Destruction
