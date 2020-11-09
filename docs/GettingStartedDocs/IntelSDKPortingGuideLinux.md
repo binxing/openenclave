@@ -371,6 +371,17 @@ keyword to identify switchless functions: transition_using_threads.
 
 TBD: Data structure to configure/initialize and tune (callbacks) switchless.
 
+## Protected Code Loader (PCL)
+
+TBD.
+
+## Protected File System (PFS)
+
+The Open Enclave SDL does not support encrypted files. The OE did port this
+feature to a branch, it was then deprecated because they want a full file
+system (not an encrypted file). We need to work with the OE on a new
+architecture. 
+
 ## Functions and Data Structures Reference
 
 ### Enclave Creation and Destruction
