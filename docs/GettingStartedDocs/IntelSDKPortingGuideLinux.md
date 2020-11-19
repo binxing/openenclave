@@ -391,6 +391,121 @@ architecture.
 
 TBD.
 
+## Remote Attestation
+
+The Intel® SGX SDK supports APIs for generation and verification various types of quotes.
+* For quote generation:
+    * There are 3 sets of APIs, and they are available only on the host (untrusted) side.
+        * The [DCAP Quoting Library (QL) API](https://github.com/intel/SGXDataCenterAttestationPrimitives/blob/master/QuoteGeneration/quote_wrapper/ql/inc/sgx_dcap_ql_wrapper.h) supports generation of ECDSA quotes.
+        * The legacy [quote API](https://github.com/intel/linux-sgx/blob/master/common/inc/sgx_uae_epid.h) supports generation of EPID quotes (linkable and unlinkable).
+        * The [quote-ex API](https://github.com/intel/linux-sgx/blob/master/common/inc/sgx_uae_quote_ex.h) supports generation of both ECDSA and EPID quotes.
+        * These 3 sets of API expose similar features:
+            * Get Quoting Enclave (QE) SGX target info structure.
+                * DCAP API function: `sgx_qe_get_target_info()`
+                * quote API function: `sgx_init_quote()`
+                * quote-ex API function: `sgx_init_quote_ex()`
+            * Get quote size.
+                * DCAP API function: `sgx_qe_get_quote_size()`
+                * quote API function: `sgx_calc_quote_size()`
+                * quote-ex API function: `sgx_get_quote_size_ex()`
+            * Convert enclave SGX report (targeted to the QE) to quote, and place it in the caller supplied buffer.
+                * DCAP API function: `sgx_qe_get_quote()`
+                * quote API function: `sgx_get_quote()`
+                * quote-ex API function: `sgx_get_quote_ex()`
+    * With any of the above APIs, the quote generation flow is similar, with multiple steps listed below. These APIs only support host-side operation in steps 1 and 5. Implmenetation of other steps are the responsiblity of the application software.
+        * Step 1: the host gets local QE target info.
+        * Step 2: the host passes the QE target info to the enclave.
+        * Step 3: the enclave generates an SGX report targeted to the local QE.
+        * Step 4: the enclave sends the SGX report to the host.
+        * Step 5: the host gets quote size, allocates buffer for the quote, and converts the enclave SGX report to a quote placed the allocated buffer.
+
+* For quote verification:
+    * The Intel® SGX SDK only supports verification of ECDSA quotes, with both host and enclave side APIs:
+        * Host-side API: [DCAP Quote Verification Library (QVL) / Quote Verification Enclave (QVE)](https://github.com/intel/SGXDataCenterAttestationPrimitives/blob/master/QuoteVerification/dcap_quoteverify/inc/sgx_dcap_quoteverify.h)
+            * API function: `sgx_qv_verify_quote()`
+                * The QVL API enables quote verification to be performed either by the host-side library itself, or by the QVE.
+                * Note: Quote verification with QVE is valuable when the caller is an enclave that can verify QVE identity and security properties.
+            * API function: `sgx_qv_get_qve_identity()`
+        * Enclave-side API: [DCAP Trusted Verification Library (TVL)](https://github.com/intel/SGXDataCenterAttestationPrimitives/blob/master/QuoteVerification/dcap_tvl/sgx_dcap_tvl.h)
+            * API function: `sgx_tvl_verify_qve_report_and_identity()`
+                * The TVL API verifies the QVE identity and the QVE report returned from the QVL API.
+    * Host-side ECDSA quote verificaiton flow is straightforward:
+        * The host application calls the QVL API `sgx_qv_verify_quote()` to verify the quote using the host-side QVL library directly.
+    * Enclave-side ECDSA quote verification flow is more complex:
+        * Step 1: the enclave gets its self target info.
+        * Step 2: the enclave ocalls to the host, to invoke the QVL API `sgx_qv_verify_quote()` to verify quote with QVE. The verification result protected by a QVE report is returned.
+        * Step 3: the enclave calls TVL API `sgx_tvl_verify_qve_report_and_identity()` to verify the QVE identity and security properties, as well as the quote verification result in the QVE report.
+
+Note: The Intel® SGX SDK includes a [RemoteAttestation](https://github.com/intel/linux-sgx/blob/master/SampleCode/RemoteAttestation) sample project that demonstrates remote attestation in the context of the Key Exchange (KE) library, which will be covered in the Key Exchange Library section.
+
+As compared to the Intel® SGX SDK, the OE SDK supports a higher level API that is is more friendly to application software developers.
+* The document [Attestation_API_Proposal.md](https://github.com/openenclave/openenclave/blob/master/docs/DesignDocs/Attestation_API_Proposal.md) explains the overall API proposal.
+    * The [Implementation of SGX Plugins](https://github.com/openenclave/openenclave/blob/master/docs/DesignDocs/Attestation_API_Proposal.md#implementation-of-sgx-plugins) section of this document describes supported formats for SGX evidence attestation and verification.
+        * Generation of evidence in ECDSA and EPID formats.
+        * Verification of evidence in ECDSA format.
+* [Attester API](https://github.com/openenclave/openenclave/blob/master/include/openenclave/attestation/attester.h) for evidence generation:
+    * The API is available only on the enclave side.
+    * API function `oe_attester_select_format()`: select a supported format ID.
+    * API function `oe_get_evidence()`: generate evidence of the input format, and return it in a dynamically allocated buffer.
+* [Verifier API](https://github.com/openenclave/openenclave/blob/master/include/openenclave/attestation/verifier.h) for evidence verivication:
+    * The API is available on both the enclave and host sides.
+    * API function `oe_verifier_get_formats()`: get a list of supported formats.
+    * API function `oe_verifier_get_format_settings()`: get optional parameters (if any) for the input format.
+    * API function `oe_verify_evidence()`: verify input evidence.
+
+Note: The OE SDK API functions `oe_get_report()` and `oe_verify_report()` are legacy and will be deprecated.
+
+To port existing ISV SGX software projects from the Intel® SGX SDK to the OE SDK:
+* The ISV software projects that use the Intel® SGX SDK quote generation API need to be updated to use the OE SDK attester API.
+    * The existing 5-step flow based on the Intel® SGX SDK is reduced to a call to the OE SDK API `oe_get_evidence()` in the attester enclave.
+    * For support of multiple evidence formats, a call to `oe_attester_select_format()` can be performed to select a format that is supported by the attester enclave.
+    * Dependencies:
+        * Application enclave code includes header `openenclave/attestation/attester.h`.
+        * Application enclave EDL file imports `openenclave/edl/attestation.edl`.
+        * Target platform has SGX package `libsgx-dcap-ql` or `libsgx-quote-ex`, and their dependencies, installed.
+* The ISV software projects that use the Intel® SGX SDK quote verification API need to be updated to use the OE SDK verifier API.
+    * For host-side verifidation:
+        * The existing call to the Intel® SGX SDK QVL API `sgx_qv_verify_quote()` is replaced with a call to the OE SDK API `oe_verify_evidence()`.
+        * If the verifier application supports multiple evidence formats, it can call `oe_verifier_get_formats()` and pass the output list of format IDs to attesters.
+        * Dependencies:
+            * Application host code includes header `openenclave/attestation/verifier.h`.
+            * Target platform has SGX package `libsgx-dcap-quote-verify` and its dependencies installed.
+    * For enclave-side verifidation:
+        * The existing 3-step flow based on the Intel® SGX SDK QVL / TVL API is reduced to a call to the OE SDK API `oe_verify_evidence()`.
+        * If the verifier enclave supports multiple evidence formats, it can call `oe_verifier_get_formats()` and pass the output list of format IDs to attesters.
+        * Dependencies:
+            * Application enclave code includes header `openenclave/attestation/verifier.h`.
+            * Application enclave EDL file imports `openenclave/edl/attestation.edl`.
+            * Target platform has SGX package `libsgx-dcap-quote-verify` and its dependencies installed.       
+
+## Local attestation and Secure Session Establishment
+
+The Intel® SGX SDK includes a library for local attestation and Diffie-Hellman (DH) session establishment between two enclaves on the same platform. The use of this DH Library is demonstrated in the [LocalAttestation](https://github.com/intel/linux-sgx/tree/master/SampleCode/LocalAttestation) sample project as part of the Intel® SGX SDK.
+* The DH library API is declared in header [sgx_dh.h](https://github.com/intel/linux-sgx/blob/master/common/inc/sgx_dh.h).
+* The API functions are documented in Diffie-Hellman (DH) Session Establishment Functions section of the [Intel® SGX SDK Developer Reference](https://download.01.org/intel-sgx/linux-2.6/docs/Intel_SGX_Developer_Reference_Linux_2.6_Open_Source.pdf) document.
+* The [sample project]() is documented in the Local (Intra-Platform) Attestation section of the [Intel® SGX SDK Developer Guide](https://download.01.org/intel-sgx/linux-2.6/docs/Intel_SGX_Developer_Guide.pdf)
+
+This library will be ported to the OE SDK as an add-on library. After porting, this library will have a dependency on the ported tcrypto library.
+
+## Key Exchange Library
+
+The Intel® SGX SDK Key Exchange (KE) library implements the client-side of a variation of SIGMA protocol, for a client SGX enclave to generate an ECDSA or EPID quote, send the quote to a remote server (sometimes called relying party or RP) for attestation, and generate encryption and MAC keys shared with the RP. Note: the remote server side of the implementation is out of the scope of the Intel® SGX SDK.
+
+The KE library has APIs on both the enclave and host sides:
+* The enclave side is called Trusted Key Exchange (TKE) API, declared in header [sgx_tkey_exchange.h](https://github.com/intel/linux-sgx/blob/master/common/inc/sgx_tkey_exchange.h)
+* The host side is called Untrusted Key Exchange (UKE) API, declared in header [sgx_ukey_exchange.h](https://github.com/intel/linux-sgx/blob/master/common/inc/sgx_ukey_exchange.h)
+
+The KE API functions are described in the [Intel® SGX SDK Developer Reference](https://download.01.org/intel-sgx/linux-2.6/docs/Intel_SGX_Developer_Reference_Linux_2.6_Open_Source.pdf) document.
+
+There is an [end-to-end sample project](https://software.intel.com/content/www/us/en/develop/articles/code-sample-intel-software-guard-extensions-remote-attestation-end-to-end-example.html) that demonstrates how this API can be used for remote attestation and secure key exchange. A [flowchart diagram](https://software.intel.com/content/dam/develop/external/us/en/images/guard-extensions-remote-attestation-end-to-end-example-fig3-781729.png) in this project shows the overall flow.
+
+The OE SDK supports standard-based key exchange protcol call Attested TLS, for remote attestation and establishment of trusted channel for exchange of keys or other sensitive data.
+* The Attested TLS protocol is explained in this [README document](https://github.com/openenclave/openenclave/blob/master/samples/attested_tls/AttestedTLSREADME.md#what-is-an-attested-tls-channel).
+* The API for certificate generation and verification, `oe_get_attestation_certificate_with_evidence()` and `oe_verify_attestation_certificate_with_evidence()` respectively, are declared in headers [attestation/attester.h](https://github.com/openenclave/openenclave/blob/master/include/openenclave/attestation/attester.h) and [attestation/verifier.h](https://github.com/openenclave/openenclave/blob/master/include/openenclave/attestation/verifier.h).
+* There is an [Attested TLS sample](https://github.com/openenclave/openenclave/tree/master/samples/attested_tls) that demonstrates how to establish an Attested TLS session between two enclaves, or between an enclave and a host.
+
+The KE library will not be available in the OE SDK. Existing ISV enclave and host software that uses the KE library can be ported to use standard-based Attested TLS protocol supported by the OE SDK.
+
 ## Functions and Data Structures Reference
 
 ### Enclave Creation and Destruction
@@ -537,4 +652,4 @@ bool oe_thread_equal(oe_thread_t thread1, oe_thread_t thread2);
 ## Authors
 
 Cedric Xing (cedric.xing@intel.com)
-
+Shanwei Cen (@shnwc)
