@@ -381,7 +381,7 @@ TBD.
 
 ## Protected File System (PFS)
 
-The Open Enclave SDL does not support encrypted files. The OE did port this
+The Open Enclave SDK does not support encrypted files. The OE did port this
 feature to a branch, it was then deprecated because they want a full file
 system (not an encrypted file). We need to work with the OE on a new
 architecture. 
