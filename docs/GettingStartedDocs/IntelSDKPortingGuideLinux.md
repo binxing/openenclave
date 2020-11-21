@@ -365,7 +365,20 @@ initialized when the enclave thread starts execution for the first time.
 
 ### POSIX Threads (pthreads)
 
-TBD.
+The SGX SDK supports a subset of the POSIX Threads API. The main purpose of the
+supported pthreads API is to enable the OpenMP runtime, which, in turn, enables
+the oneAPI Deep Neural Network Library (oneDNN).
+
+The SGX SDK supports creating, exiting and joining threads, mutex, conditional
+variable and readers-writer lock synchronization operations, as well as storing
+and retrieving data from a thread's local storage area.
+
+The Open Enclave SDK also supports a subset of the POSIX Tread API. However, it
+is limited to thread synchronization and thread local storage. pthread_create,
+pthread_join, and pthread_detach are wrappers around oe_pthread_create,
+oe_pthread_join, and oe_pthread_detach, respectively. These functions currently
+throw an assertion. We need to work with the OE team on an architecture to
+support threading inside enclaves.
 
 ## Switchless
 
