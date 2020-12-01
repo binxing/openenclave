@@ -39,7 +39,7 @@ oe_result_t oe_seal(
     uint32_t settings_count,
     const void* opt_params,
     size_t opt_params_size,
-    uint8_t* plaintext,
+    const uint8_t* plaintext,
     size_t plaintext_size,
     uint8_t** sealed_data,
     size_t* sealed_data_size);
@@ -50,6 +50,8 @@ Where,
 - `sealer` is the UUID identifying the sealing plugin.
   - **Open**: Is there a TEE agnostic sealer that works across all TEEs?
   - **Open**: How to enumerate available sealers and their capabilities, so that the developer can determine the right one that meets his/her requirements?
+    - `oe_enumerate_sealers()`? How to abstract/describe a sealer's capabilities?
+    - Without an enuermation API, the sealer must be selected at build time. Then why parameterize it?
 - `policy` is either `OE_SEAL_POLICY_UNIQUE` or `OE_SEAL_POLICY_PRODUCT`.
 - `settings` contain settings for seal key derivation.
   - There are generic settings applicable to all TEEs, such as `entropy`. TEE agnostic code should use generic settings only.
@@ -64,6 +66,115 @@ Option 1 focuses on completeness.
 - All combinations of TEE/cryptosuite can be implemented as separate sealers.
 - Each sealer may support a distinct set of options/parameters that are passed through by the API.
 - Multiple sealers can coexist in the same enclave.
+
+### Sample Code
+
+In the most common cases, both `settings` and `opt_params` are set to `NULL` to take sealer defaults.
+
+```C
+oe_result_t seal_my_data(
+    const uint8_t* my_data,
+    size_t my_data_size,
+    uint8_t** blob,
+    size_t* blob_size)
+{
+    return oe_seal(
+        OE_SEAL_DEFAULT_SEALER,
+        OE_SEAL_POLICY_PRODUCT,
+        NULL,
+        0,
+        NULL,
+        0,
+        my_data,
+        my_data_size,
+        blob,
+        blob_size);
+}
+```
+
+Let's assume `oe_key_derivation_setting_t` is defined as a tuple like below.
+
+```C
+typedef _key_derivation_setting
+{
+    int type;
+    int size;
+    const void* data;
+} oe_key_derivation_setting_t;
+
+// Settings supported by all TEEs
+#define OE_KEY_DERIVATION_ENTROPY               1
+// More TEE neutral setting types...
+
+// Settings supported by SGX
+#define OE_SGX_KEY_DERIVATION_ATTRIBUTE_MASK    0x10001
+// More SGX specific setting types...
+```
+
+In the rarer cases where key derivation needs to be tuned, the `settings` array is used.
+
+```C
+oe_result_t seal_my_data(
+    const uint8_t* my_data,
+    size_t my_data_size,
+    uint8_t** blob,
+    size_t* blob_size)
+{
+    static const char label[] = "Sealing Key";
+    static const uint64_t attr_mask = OE_SEALKEY_DEFAULT_FLAGSMASK | OE_SGX_FLAGS_PROVISION_KEY;
+
+    oe_key_derivation_setting_t settings[2];
+    settings[0].type = OE_KEY_DERIVATION_ENTROPY;
+    settings[0].size = sizeof(label);
+    settings[0].data = label;
+    settings[1].type = OE_SGX_KEY_DERIVATION_ATTRIBUTE_MASK;
+    settings[1].size = sizeof(attr_mask);
+    settings[1].data = &attr_mask;
+    // More settings go here...
+
+    return oe_seal(
+        OE_SEAL_DEFAULT_SEALER,
+        OE_SEAL_POLICY_PRODUCT,
+        settings,
+        sizeof(settings)/sizeof(*settings),
+        NULL,
+        0,
+        my_data,
+        my_data_size,
+        blob,
+        blob_size);
+}
+```
+
+In the even rarer cases where additional sealer specific options need to be passed, the free-formed `opt_params` is set up in a sealer specific manner.
+
+```C
+// A sealer specific header is included for definitions of optional parameters
+#include <openenclave/sealers/seal_ABC.h>
+
+oe_result_t seal_my_data(
+    const uint8_t* my_data,
+    size_t my_data_size,
+    uint8_t** blob,
+    size_t* blob_size)
+{
+    sealer_ABC_option_t options[] = {
+        // sealer specific options go here...
+    };
+
+    return oe_seal(
+        OE_SEAL_SEALER_ABC,
+        OE_SEAL_POLICY_PRODUCT,
+        NULL,
+        0,
+        options,
+        sizeof(options),
+        my_data,
+        my_data_size,
+        blob,
+        blob_size);
+}
+```
 
 ## Option 2 - Simple APIs
 
@@ -160,3 +271,99 @@ Then,
 
 - By `oe_seal()`, the source code is implementation neutral and will work with any library supplied at the linker command line.
 - By `oe_seal_algo1()` and/or `oe_seal_algo2()`, the source code is explicit about the implementation so could work with multiple implementations in the same enclave.
+
+### Sample Code
+
+In the most common cases,
+
+```C
+oe_result_t seal_my_data(
+    const uint8_t* my_data,
+    size_t my_data_size,
+    uint8_t** blob,
+    size_t* blob_size)
+{
+    oe_result_t result;
+    oe_seal_key_info_t key_info;
+
+    result = oe_initialize_seal_key_info(
+        &key_info,
+        OE_SEAL_POLICY_PRODUCT,
+        NULL,
+        0);
+
+    if (result == OE_OK)
+        result = oe_seal(
+            &key_info,
+            my_data,
+            my_data_size,
+            blob,
+            blob_size);
+
+    return result;
+}
+```
+
+In the rarer cases where key derivation needs to be tuned,
+
+```C
+oe_result_t seal_my_data(
+    const uint8_t* my_data,
+    size_t my_data_size,
+    uint8_t** blob,
+    size_t* blob_size)
+{
+    static const char label[] = "Sealing Key";
+    oe_result_t result;
+
+    result = oe_initialize_seal_key_info(
+        &key_info,
+        OE_SEAL_POLICY_PRODUCT,
+        label,
+        sizeof(label));
+
+    if (result == OE_OK)
+    {
+        key_info.attribute_mask.flags = OE_SEALKEY_DEFAULT_FLAGSMASK | OE_SGX_FLAGS_PROVISION_KEY;
+        // More assignments to key_info.* go here...
+
+        // Given oe_seal is a weak symbol, this resolves to the 1st definition on the linker's command line
+        result = oe_seal(
+            &key_info,
+            my_data,
+            my_data_size,
+            blob,
+            blob_size);
+    }
+    return result;
+}
+```
+
+Use strong/explicit symbol names when multiple implementations coexist and need to be referenced in the same enclave.
+
+
+```C
+oe_result_t reseal_my_data(
+    uint8_t* blob1,     // input blob sealed using algo1
+    size_t blob1_size,
+    uint8_t** blob2,    // output blob resealed using algo2
+    size_t* blob2_size)
+{
+    oe_result_t result;
+    oe_seal_key_info_t key_info;
+    uint8_t* my_data;
+    size_t my_data_size;
+
+    // Unseal blob1 using algo1
+    result = oe_unseal_algo1(blob1, blob1_size, &my_data, &my_data_size);
+    if (result != OE_OK)
+        return result;
+
+    result = oe_initialize_seal_key_info(&key_info, OE_SEAL_POLICY_PRODUCT, NULL, 0);
+    if (result != OE_OK)
+        return result;
+
+    // Reseal using algo2
+    return oe_seal_algo2(&key_info, my_data, my_data_size, blob2, blob2_size);
+}
+```
