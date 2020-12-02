@@ -339,14 +339,13 @@ oe_result_t seal_my_data(
 }
 ```
 
-Use strong/explicit symbol names when multiple implementations coexist and need to be referenced in the same enclave.
-
+In the cases where multiple implementations are referenced in the same enclave, use the strong/explicit symbol names.
 
 ```C
 oe_result_t reseal_my_data(
     uint8_t* blob1,     // input blob sealed using algo1
     size_t blob1_size,
-    uint8_t** blob2,    // output blob resealed using algo2
+    uint8_t** blob2,    // output blob to be sealed using algo2
     size_t* blob2_size)
 {
     oe_result_t result;
@@ -367,3 +366,53 @@ oe_result_t reseal_my_data(
     return oe_seal_algo2(&key_info, my_data, my_data_size, blob2, blob2_size);
 }
 ```
+
+## Comparison of 2 Options
+
+### Runtime vs. Buildtime Binding
+
+In Option 1 `oe_seal()` binds to a sealing provider via UUID at runtime, while in Option 2 it binds to an implementation at link time.
+
+Option 1 has the following advantages:
+
+1. An enclave can determine which sealer to use at runtime.
+2. Multiple plugins/sealers can coexist easily.
+
+(1) however isn't a requirement. After all, sealing and unsealing have to be done by the same enclave or enclaves of the same product. There's no reason the sealing and the unsealing enclaves cannot agree on the same sealer.
+
+(2) can be achieved in Option 2 as well (using weak symbols), though a bit tricky.
+
+On the flip side, UUID implies additional interface (APIs) for managing plugins, such as registering plugins and specifying the default. Option 2 however doesn't bear those management overhead (at least no additional registration APIs needed).
+
+### oe_key_derivation_setting_t vs. oe_seal_key_info_t
+
+Option 1 introduces `oe_key_derivation_setting_t` to carry sealing parameters, which is likely to be TLV tuples. Option 2 on the other hand adopts a TEE specific `oe_seal_key_info_t` structure to capture all options supported by the underlying TEE.
+
+`oe_seal_key_info_t` is NOT defined by OE but by the underlying TEE - e.g., on SGX `oe_seal_key_info_t` is in fact a `typedef` of `sgx_key_request_t`. In practice, each TEE provides dedicated ISA (on SGX) or API (on OP-TEE) for key derivation. The input to that ISA or API is well defined and could serve as the definition of `oe_seal_key_info_t`. Changes to `oe_seal_key_info_t` should be a rare event. Moreover, TEE ISA/API changes are usually backward compatible - i.e., only new fields will be added while existing fields will be kept, hence exposing it wouldn't cause compatibility problems normally.
+
+In contrast, `oe_key_derivation_setting_t` is an abstraction to present TEE features in a logical way. But
+
+- It's hard to work out a "reasonable" set of features across supported TEEs to be exposed as setting type. Or if the full set of features are provided for each TEE, it'd be cumbersome (more cumbersome than direct assignments to structure fields) to set up.
+- Once a new TEE is added to OE's support list, the set of settings needs to be reviewed and probably revised, which is an on-going burden to architecture.
+- Documentation overhead - OE has to document the supported settings, while enclave developers have to study them. For developers who are dealing with TEE specific features, they are usually familiar with the TEE details so would probably prefer to work with the TEE ISA/API defined structures directly. The additional abstraction layer presents an overhead to both SDK and enclave developers.
+- An advantage of Option 1 is `oe_seal()` may sanitize input before passing them through to the selected plugin, while in Option 2 the implementation has to validate function parameters by itself.
+
+### Optional Parameters
+
+Option 1 supports an additional `opt_params` as an opaque structure to cover all other settings/parameters that cannot be covered by `settings`. Option 2 doesn't support `opt_params`.
+
+`opt_params` can carry plugin specific settings, such as key length, tag length, IV, etc. Generally speakings, all settings to a sealing implementation can fall into 2 categories - key derivation settings and crypto settings. The 1st category is TEE specific and captured in `oe_seal_key_info_t` in Option 2, while the 2nd category is NOT offered intentionally and the implementation is supposed to use the strongest setting supported by the underlying TEE.
+
+### 1-step vs. 2-step Sealing
+
+In Option 1 sealing is a 1-step process while it's a 2-step process in Option 2.
+
+Option 1 adopts 1-step sealing because
+
+- Some believe that seal keys shall never be revealed to developers, hence the existing `oe_get_seal_key()` API shall be depricated/removed. `key_info` is an intermediate structure serving as input to `oe_get_seal_key()`, so has no reason to be exposed anymore once `oe_get_seal_key()` has been removed.
+- `oe_seal()` accepts `settings` and `opt_params` that cover all possible options/parameters, so there's no need for developers to touch `key_info`.
+
+Option 2 employs 2-step sealing because
+
+- Some (including the author) believe that seal keys could have more usages than just sealing. Hence `oe_get_seal_key()` shall be kept. Given that, `key_info` could be set up in the same way (by `oe_initialize_seal_key_info()`) and shared by both `oe_get_seal_key()` and `oe_seal()`.
+- `oe_initialize_seal_key_info()` takes TEE neutral parameters only. Any TEE specific settings must be done via direct assignments to `key_info` fields. With that said, sealing could be a 3-step process, with the TEE specific code inserted in between `oe_initialize_seal_key_info()` and `oe_seal()`.
