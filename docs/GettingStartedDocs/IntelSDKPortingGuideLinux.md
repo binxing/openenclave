@@ -402,7 +402,21 @@ architecture.
 
 ## Trusted Crypto Library (tcrypto)
 
-TBD.
+The Intel SGX SDK includes a wrapper library, sgx_tcrypto, that exposes a
+high-level cryptographic API. Other libraries of the SGX SDK, such as the
+Sealing Library, as well as Intel's Architecture Enclaves use this API.
+The main goal of the sgx_tcrypto library is to provide a common cryptographic
+API independent of the underlying cryptographic library, which could be
+the Intel IPP Cryptographic Library or OpenSSL.
+
+The sgx_tcrypto library is also available to build enclaves with the OE SDK.
+However, there are some minor differences. The sgx_tcrypto is provided outside
+the OE SDK. The SGX SDK allows building a single version of sgx_tcrypto, which
+internally links with either IPP Crypto or OpenSSL. For the OE SDK, there are
+two sgx_tcrypto versions: sgx_tcrypto_ipp and sgx_tcrypto_openssl. The former
+links with IPP Crypto, whereas the latter requires the enclave developer to add
+the OE SDK OpenSSL library to the list of linker command line.
+
 
 ## Remote Attestation
 
